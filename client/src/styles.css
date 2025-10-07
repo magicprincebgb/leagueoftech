@@ -1,0 +1,212 @@
+:root {
+  /* Brand */
+  --primary: #22caf7;
+
+  /* LIGHT MODE */
+  --bg: #ffffff;           /* page background */
+  --fg: #111418;           /* main text */
+  --card: #ffffff;         /* surfaces/cards */
+  --muted: #667085;        /* secondary text */
+  --border: rgba(0,0,0,.08);
+  --shadow: 0 8px 24px rgba(0,0,0,0.08);
+
+  /* Component tints (derived) */
+  --nav-border: rgba(0,0,0,.06);
+  --input-bg: #ffffff;
+  --suggest-bg: #ffffff;
+}
+
+:root.dark {
+  /* DARK MODE */
+  --bg: #222222;
+  --fg: #f3f5f7;
+  --card: #1f1f1f;
+  --muted: #aab1b8;
+  --border: rgba(255,255,255,.08);
+  --shadow: 0 10px 28px rgba(0,0,0,0.35);
+
+  --nav-border: rgba(255,255,255,.08);
+  --input-bg: #1f1f1f;
+  --suggest-bg: #222222;
+}
+
+/* Reset / base */
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{
+  margin:0;
+  font-family:"Poppins",system-ui,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--fg);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.container{max-width:1200px;margin:0 auto;padding:0 1rem}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;gap:.5rem;
+  padding:.75rem 1rem;border-radius:12px;
+  border:1px solid transparent;cursor:pointer;
+  transition:transform .15s ease,box-shadow .2s ease,background .2s ease,opacity .2s ease;
+  background:var(--card); color:var(--fg);
+}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:#031116}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--fg)}
+
+/* Surfaces */
+.card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.grid{display:grid;gap:1rem}
+.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:900px){.grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.grid-3{grid-template-columns:minmax(0,1fr)}}
+
+/* Navbar */
+.nav{
+  position:sticky;top:0;background:var(--bg);z-index:50;
+  border-bottom:1px solid var(--nav-border);
+  backdrop-filter:saturate(120%) blur(6px)
+}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;padding:.75rem 0;gap:1rem}
+.brand{display:flex;align-items:center;gap:.75rem;font-weight:700}
+.brand-logo{
+  width:36px;height:36px;border-radius:10px;
+  background:linear-gradient(135deg,var(--primary), rgba(34,202,247,.65));
+  box-shadow:0 6px 18px rgba(34,202,247,.35);
+}
+
+/* Search */
+.search{position:relative;flex:1;max-width:520px}
+.search input{
+  width:100%;padding:.75rem 1rem;border-radius:12px;
+  border:1px solid var(--border);
+  background:var(--input-bg);color:var(--fg)
+}
+.suggestions{
+  position:absolute;top:110%;left:0;right:0;
+  background:var(--suggest-bg);border:1px solid var(--border);
+  border-radius:12px;box-shadow:var(--shadow);overflow:hidden
+}
+.suggestions li{padding:.6rem 1rem;cursor:pointer}
+.suggestions li:hover{background:var(--card)}
+.nav-links{display:flex;align-items:center;gap:1rem}
+.badge{
+  display:inline-grid;place-items:center;min-width:22px;height:22px;
+  border-radius:999px;background:var(--primary);color:#06141a;
+  font-size:.75rem;padding:0 .25rem;border:1px solid var(--border)
+}
+
+/* Hero */
+.hero{
+  display:grid;place-items:center;min-height:56vh;
+  background:
+    radial-gradient(1200px 480px at 20% -20%, rgba(34,202,247,.18), transparent 60%),
+    radial-gradient(1200px 480px at 80% 120%, rgba(34,202,247,.10), transparent 60%)
+}
+.hero-inner{display:grid;gap:1rem;place-items:center;text-align:center}
+.hero h1{font-size:clamp(1.8rem,2.5vw,3rem);margin:0}
+.hero p{color:var(--muted);margin:0}
+.hero-cta{display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center;margin-top:.5rem}
+
+/* Product card */
+.p-card{display:grid;gap:.6rem;padding:1rem}
+.p-thumb{
+  display:block;
+  border-radius:12px;
+  overflow:hidden;
+  aspect-ratio: 4 / 3;     /* fix card image height */
+  background: var(--card);
+}
+.p-thumb > img{
+  width:100%;
+  height:100%;
+  object-fit: cover;        /* crop to fill consistently */
+  display:block;
+}
+.p-card img{border-radius:12px;aspect-ratio:1.2/1;object-fit:cover}
+.price{font-weight:700}
+.kbd{
+  font:inherit;background:var(--bg);border:1px solid var(--border);
+  border-radius:.5rem;padding:.25rem .5rem
+}
+/* --- Product Detail: fixed gallery --- */
+.p-gallery { display: grid; gap: 12px; }
+
+/* Main image area: fixed ratio so layout never shifts */
+.p-gallery-main{
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+  aspect-ratio: 1 / 1;        /* <- change to 1/1, 16/9, etc if you prefer */
+  display: grid;
+  place-items: center;         /* centers "contain" nicely */
+}
+.p-gallery-main > img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;         /* keep full image visible, no cropping */
+  display: block;
+}
+
+/* Thumbnails row: uniform squares */
+.p-gallery-thumbs{
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.p-gallery-thumb{
+  padding: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  width: 72px;
+  height: 72px;
+  cursor: pointer;
+}
+.p-gallery-thumb.is-active{
+  outline: 2px solid var(--primary);
+  outline-offset: 0;
+}
+.p-gallery-thumb > img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+
+/* Footer */
+.footer{margin-top:2rem;padding:2rem 0;border-top:1px solid var(--nav-border);color:var(--muted)}
+.footer a{color:var(--fg)}
+
+/* Forms */
+.input, select{
+  width:100%;padding:.75rem 1rem;border-radius:12px;
+  border:1px solid var(--border);background:var(--input-bg);color:var(--fg)
+}
+.label{font-size:.9rem;margin:.4rem 0 .25rem 0;color:var(--muted)}
+
+/* Tables */
+.table{width:100%;border-collapse:separate;border-spacing:0 8px}
+.table th, .table td{padding:.75rem 1rem;text-align:left}
+.table thead th{color:var(--muted);font-weight:600}
+.table tbody tr{background:var(--card);border:1px solid var(--border)}
+.table tbody tr td:first-child{border-top-left-radius:12px;border-bottom-left-radius:12px}
+.table tbody tr td:last-child{border-top-right-radius:12px;border-bottom-right-radius:12px}
+
+/* Utilities (optional) */
+.badge-outline{
+  background:transparent;border:1px solid var(--border);color:var(--fg);
+  padding:.2rem .5rem;border-radius:999px;font-size:.8rem
+}
+.brand img {
+  border-radius: 12px; /* adjust: 8px = subtle, 12px = soft, 50% = circle */
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1); /* optional soft shadow */
+  background-color: var(--card); /* ensures transparent logos look good */
+  padding: 4px; /* optional padding inside the logo box */
+}
