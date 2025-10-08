@@ -26,7 +26,7 @@ await connectDB();
 app.use(cors({ origin: ORIGIN, credentials: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(morgan("dev"));
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+//app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Routes
 app.get("/api/health", (req, res) => res.json({ ok: true, name: "League of Tech API" }));

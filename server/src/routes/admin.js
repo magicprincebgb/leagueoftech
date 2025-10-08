@@ -1,46 +1,54 @@
 import express from "express";
 import multer from "multer";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
 import Product from "../models/Product.js";
 import Order from "../models/Order.js";
 import { protect, adminOnly } from "../middleware/auth.js";
 
-const router = express.Router();
+// ===== Cloudinary (persistent image storage) =====
+import { v2 as cloudinary } from "cloudinary";
 
-// __dirname for ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Ensure uploads dir exists (prevents ENOENT on Windows)
-const uploadDir = path.join(__dirname, "../../uploads");
-fs.mkdirSync(uploadDir, { recursive: true });
-
-// Multer setup (primary + gallery)
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename(req, file, cb) {
-    const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, unique + path.extname(file.originalname));
-  }
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Multer in-memory storage -> we stream buffers to Cloudinary
 const upload = multer({
-  storage,
-  limits: { fileSize: 2 * 1024 * 1024 }, // 2MB per image
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per image
   fileFilter: (req, file, cb) => {
     if (/\.(jpg|jpeg|png|webp)$/i.test(file.originalname)) return cb(null, true);
     cb(new Error("Only image files allowed (jpg, jpeg, png, webp)"));
   }
 });
 
-const fileUrl = f => `/uploads/${f.filename}`;
+// Upload single file buffer to Cloudinary, return secure_url (+ public_id)
+const uploadToCloudinary = (file) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "leagueoftech/products", resource_type: "image" },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(file.buffer);
+  });
+
+// Optional helper to delete by public_id if you want to truly remove from Cloudinary
+async function destroyFromCloudinaryByUrl(url) {
+  try {
+    // Expecting URLs like: https://res.cloudinary.com/<cloud>/image/upload/v123/leagueoftech/products/<public_id>.<ext>
+    const m = url.match(/\/upload\/(?:v\d+\/)?(.+)\.(?:jpg|jpeg|png|webp)$/i);
+    if (!m) return;
+    const publicId = m[1];
+    await cloudinary.uploader.destroy(publicId);
+  } catch {
+    // swallow errors (safe best-effort)
+  }
+}
 
 /** Normalize options payload into
  *  [{ name, values:[{label, priceDelta}] }]
- *  Accepts previous shape where values were strings.
+ *  Accepts previous shape where values were strings or { label, priceDelta } objects.
  */
 function normalizeOptions(input) {
   if (!input) return [];
@@ -62,11 +70,13 @@ function normalizeOptions(input) {
     }));
 }
 
+const router = express.Router();
+
 /* ===========================
    PRODUCTS (ADMIN)
    =========================== */
 
-// CREATE product (supports: primary image + gallery + options with deltas)
+// CREATE product (primary + gallery + options with deltas)
 router.post(
   "/products",
   protect,
@@ -80,8 +90,22 @@ router.post(
       }
 
       const kws = (keywords || "").split(",").map(k => k.trim()).filter(Boolean);
-      const primary = req.files?.image?.[0] ? fileUrl(req.files.image[0]) : null;
-      const gallery = (req.files?.images || []).map(fileUrl);
+
+      // Upload primary image
+      let primaryUrl = null;
+      if (req.files?.image?.[0]) {
+        const up = await uploadToCloudinary(req.files.image[0]);
+        primaryUrl = up.secure_url;
+      }
+
+      // Upload gallery
+      const gallery = [];
+      if (req.files?.images?.length) {
+        for (const f of req.files.images) {
+          const up = await uploadToCloudinary(f);
+          gallery.push(up.secure_url);
+        }
+      }
 
       const product = await Product.create({
         name,
@@ -89,13 +113,14 @@ router.post(
         price: Number(price),
         keywords: kws,
         category: category || "General",
-        image: primary,
+        image: primaryUrl,
         images: gallery,
-        options: normalizeOptions(options)   // <-- keep deltas
+        options: normalizeOptions(options)
       });
 
       res.json({ message: "Product created", product });
     } catch (e) {
+      console.error("Create product failed:", e);
       res.status(500).json({ message: e.message });
     }
   }
@@ -122,15 +147,22 @@ router.patch(
         p.keywords = String(keywords).split(",").map(k => k.trim()).filter(Boolean);
       }
 
-      // options (now supports deltas)
       if (options !== undefined) {
         p.options = normalizeOptions(options);
       }
 
-      // images
-      if (req.files?.image?.[0]) p.image = fileUrl(req.files.image[0]);
+      // Primary image
+      if (req.files?.image?.[0]) {
+        const up = await uploadToCloudinary(req.files.image[0]);
+        p.image = up.secure_url;
+      }
+      // Gallery images
       if (req.files?.images?.length) {
-        const newOnes = req.files.images.map(fileUrl);
+        const newOnes = [];
+        for (const f of req.files.images) {
+          const up = await uploadToCloudinary(f);
+          newOnes.push(up.secure_url);
+        }
         if (String(replaceGallery) === "true") p.images = newOnes;
         else p.images.push(...newOnes);
       }
@@ -138,6 +170,7 @@ router.patch(
       await p.save();
       res.json({ message: "Updated", product: p });
     } catch (err) {
+      console.error("Update product failed:", err);
       res.status(500).json({ message: "Error updating product", error: err.message });
     }
   }
@@ -148,20 +181,33 @@ router.delete("/products/:id", protect, adminOnly, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Product not found" });
+
+    // Optional: remove images from Cloudinary too (best-effort)
+    const allUrls = [product.image, ...(product.images || [])].filter(Boolean);
+    await Promise.all(allUrls.map(u => destroyFromCloudinaryByUrl(u)));
+
     await product.deleteOne();
     res.json({ message: "Product deleted" });
   } catch (err) {
+    console.error("Delete product failed:", err);
     res.status(500).json({ message: "Error deleting product", error: err.message });
   }
 });
 
-// DELETE a single image from a product (optional)
+// DELETE a single image from a product
 router.delete("/products/:id/image", protect, adminOnly, async (req, res) => {
-  const { url } = req.query; // /api/admin/products/:id/image?url=/uploads/abc.webp
+  const { url } = req.query; // /api/admin/products/:id/image?url=<full_cloudinary_url>
   const p = await Product.findById(req.params.id);
   if (!p) return res.status(404).json({ message: "Product not found" });
+
   p.images = (p.images || []).filter(i => i !== url);
   if (p.image === url) p.image = null;
+
+  // Optional: remove from Cloudinary (best-effort)
+  if (url && /^https?:\/\/res\.cloudinary\.com\//.test(url)) {
+    await destroyFromCloudinaryByUrl(url);
+  }
+
   await p.save();
   res.json({ message: "Image removed", product: p });
 });
@@ -193,7 +239,7 @@ router.get("/orders/:id", protect, adminOnly, async (req, res) => {
   res.json(o);
 });
 
-// update order meta (status, tracking, notes) — auto-paid on delivery for COD or legacy (missing) method
+// update order meta (status, tracking, notes) — auto-paid on delivery for COD/legacy method
 router.patch("/orders/:id", protect, adminOnly, async (req, res) => {
   try {
     const { status, trackingNumber, deliveredAt, notes } = req.body;
@@ -209,7 +255,7 @@ router.patch("/orders/:id", protect, adminOnly, async (req, res) => {
     if (trackingNumber !== undefined) o.trackingNumber = trackingNumber;
     if (notes !== undefined) o.notes = notes;
 
-    // Auto mark as paid when delivered for COD/legacy
+    // Auto mark as paid when delivered for COD or legacy (missing paymentMethod)
     const isCODOrLegacy = !o.paymentMethod || o.paymentMethod === "COD";
     if (isCODOrLegacy && status === "delivered") {
       if (!o.isPaid) {
